@@ -26,8 +26,7 @@ export async function setupVite(app: Express, server: Server) {
 
     try {
       const clientTemplate = path.resolve(
-        import.meta.dirname,
-        "../..",
+        process.cwd(),
         "client",
         "index.html"
       );
@@ -48,7 +47,9 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  const distPath = path.resolve(import.meta.dirname, "../..", "dist", "public");
+  // Use process.cwd() as base since esbuild doesn't polyfill import.meta.dirname
+  const baseDir = process.cwd();
+  const distPath = path.resolve(baseDir, "dist", "public");
   if (!fs.existsSync(distPath)) {
     console.error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`
