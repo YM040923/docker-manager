@@ -1,138 +1,173 @@
 import { getContainerConfigs, getGlobalSettings, addLog } from './db';
 import { getContainerStatus, startContainer, restartContainer } from './docker';
 
-let isRunning = false;
-let monitorInterval: NodeJS.Timeout | null = null;
+let sequencingInProgress = false;
+let monitoring = false;
+let monitorTimer: ReturnType<typeof setTimeout> | null = null;
 
-export async function startContainerSequence() {
-  console.log('[Container Manager] Starting container sequence...');
-  
-  try {
-    const configs = await getContainerConfigs();
-    
-    for (const config of configs) {
-      try {
-        console.log(`[Container Manager] Starting container: ${config.name}`);
-        const success = await startContainer(config.name);
-        
-        if (success) {
+const MAX_RETRIES = 20;
+const RETRY_DELAY_MS = 5000;
+
+async function ensureContainerRunning(
+  containerName: string,
+  action: 'start' | 'restart',
+  eventType: 'startup' | 'restart'
+): Promise<boolean> {
+  let retries = 0;
+
+  while (retries < MAX_RETRIES) {
+    const status = await getContainerStatus(containerName);
+
+    if (status === 'running') {
+      console.log(`[Container Manager] ${containerName} is already running, skipping ${action}`);
+      return true;
+    }
+
+    console.log(`[Container Manager] ${containerName} not running (${status}), attempting ${action}... (attempt ${retries + 1}/${MAX_RETRIES})`);
+
+    try {
+      const fn = action === 'start' ? startContainer : restartContainer;
+      const success = await fn(containerName);
+
+      if (success) {
+        // Verify it actually came up
+        const verifyStatus = await getContainerStatus(containerName);
+        if (verifyStatus === 'running') {
           await addLog({
-            containerName: config.name,
-            eventType: 'startup',
-            message: `容器启动成功`,
+            containerName,
+            eventType,
+            message: `容器${action === 'start' ? '启动' : '重启'}成功`,
           });
-          console.log(`[Container Manager] Container ${config.name} started successfully`);
-        } else {
-          await addLog({
-            containerName: config.name,
-            eventType: 'error',
-            message: `容器启动失败`,
-          });
-          console.log(`[Container Manager] Failed to start container ${config.name}`);
+          console.log(`[Container Manager] ${containerName} ${action} confirmed running`);
+          return true;
         }
-        
-        // 等待配置的延迟时间
-        if (config.startupDelay > 0) {
-          console.log(`[Container Manager] Waiting ${config.startupDelay}s before next container...`);
-          await new Promise(resolve => setTimeout(resolve, config.startupDelay * 1000));
-        }
-      } catch (error) {
-        console.error(`[Container Manager] Error starting ${config.name}:`, error);
+        // Not confirmed running yet, continue loop
+        console.log(`[Container Manager] ${containerName} ${action} returned success but not yet running, re-checking...`);
+      } else {
         await addLog({
-          containerName: config.name,
+          containerName,
           eventType: 'error',
-          message: `启动异常: ${error instanceof Error ? error.message : String(error)}`,
+          message: `容器${action === 'start' ? '启动' : '重启'}失败，将在 ${RETRY_DELAY_MS / 1000}s 后重试`,
         });
       }
+    } catch (error) {
+      console.error(`[Container Manager] Error ${action}ing ${containerName}:`, error);
+      await addLog({
+        containerName,
+        eventType: 'error',
+        message: `${action === 'start' ? '启动' : '重启'}异常: ${error instanceof Error ? error.message : String(error)}`,
+      });
     }
-    
-    console.log('[Container Manager] Container sequence completed');
+
+    retries++;
+    if (retries < MAX_RETRIES) {
+      console.log(`[Container Manager] Waiting ${RETRY_DELAY_MS / 1000}s before retry...`);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+    }
+  }
+
+  // Max retries exceeded
+  await addLog({
+    containerName,
+    eventType: 'error',
+    message: `${action === 'start' ? '启动' : '重启'}失败，已达最大重试次数 (${MAX_RETRIES})，跳过此容器`,
+  });
+  console.error(`[Container Manager] ${containerName} failed to ${action} after ${MAX_RETRIES} retries, giving up`);
+  return false;
+}
+
+export async function startContainerSequence() {
+  if (sequencingInProgress) {
+    console.log('[Container Manager] Start sequence already in progress, skipping');
+    return;
+  }
+
+  sequencingInProgress = true;
+  console.log('[Container Manager] ========== Starting container sequence ==========');
+
+  try {
+    const configs = await getContainerConfigs();
+
+    for (const config of configs) {
+      console.log(`[Container Manager] --- Processing container: ${config.name} ---`);
+      const success = await ensureContainerRunning(config.name, 'start', 'startup');
+
+      if (success && config.startupDelay > 0) {
+        console.log(`[Container Manager] ${config.name} running, waiting ${config.startupDelay}s before next container...`);
+        await new Promise(resolve => setTimeout(resolve, config.startupDelay * 1000));
+      } else if (!success) {
+        // Still proceed to next container even if this one failed
+        console.log(`[Container Manager] ${config.name} failed to start, moving to next container`);
+      }
+    }
+
+    console.log('[Container Manager] ========== Container sequence completed ==========');
   } catch (error) {
-    console.error('[Container Manager] Error in container sequence:', error);
+    console.error('[Container Manager] Fatal error in container sequence:', error);
+  } finally {
+    sequencingInProgress = false;
   }
 }
 
-export async function startMonitoring() {
-  if (isRunning) {
+async function runMonitorCycle() {
+  try {
+    const configs = await getContainerConfigs();
+    const settings = await getGlobalSettings();
+    const checkInterval = settings?.checkInterval || 60;
+
+    console.log(`[Container Manager] Running monitor cycle (${configs.length} containers configured)`);
+
+    for (const config of configs) {
+      if (!monitoring) break; // Allow immediate stop
+      if (config.monitor !== 1) continue;
+
+      console.log(`[Container Manager] Checking container: ${config.name}`);
+      const success = await ensureContainerRunning(config.name, 'restart', 'restart');
+
+      if (!success) {
+        console.log(`[Container Manager] ${config.name} monitoring: failed to restore, will retry next cycle`);
+      }
+    }
+
+    // Schedule next cycle
+    if (monitoring) {
+      monitorTimer = setTimeout(runMonitorCycle, checkInterval * 1000);
+    }
+  } catch (error) {
+    console.error('[Container Manager] Error in monitor cycle:', error);
+    if (monitoring) {
+      // Retry after 60s on error
+      monitorTimer = setTimeout(runMonitorCycle, 60000);
+    }
+  }
+}
+
+export function startMonitoring() {
+  if (monitoring) {
     console.log('[Container Manager] Monitoring already running');
     return;
   }
-  
-  isRunning = true;
+
+  monitoring = true;
   console.log('[Container Manager] Starting container monitoring...');
-  
-  const runMonitorCycle = async () => {
-    try {
-      const configs = await getContainerConfigs();
-      const settings = await getGlobalSettings();
-      const checkInterval = settings?.checkInterval || 60;
-      
-      for (const config of configs) {
-        if (config.monitor !== 1) continue;
-        
-        try {
-          const status = await getContainerStatus(config.name);
-          
-          if (status === 'running') {
-            console.log(`[Container Manager] Container ${config.name} is running`);
-          } else if (status === 'stopped') {
-            console.log(`[Container Manager] Container ${config.name} is stopped, attempting restart...`);
-            const success = await restartContainer(config.name);
-            
-            if (success) {
-              await addLog({
-                containerName: config.name,
-                eventType: 'restart',
-                message: `容器已自动重启`,
-              });
-              console.log(`[Container Manager] Container ${config.name} restarted successfully`);
-            } else {
-              await addLog({
-                containerName: config.name,
-                eventType: 'error',
-                message: `容器重启失败`,
-              });
-              console.log(`[Container Manager] Failed to restart container ${config.name}`);
-            }
-          } else {
-            console.log(`[Container Manager] Container ${config.name} not found`);
-            await addLog({
-              containerName: config.name,
-              eventType: 'error',
-              message: `容器未找到`,
-            });
-          }
-        } catch (error) {
-          console.error(`[Container Manager] Error monitoring ${config.name}:`, error);
-          await addLog({
-            containerName: config.name,
-            eventType: 'error',
-            message: `监控异常: ${error instanceof Error ? error.message : String(error)}`,
-          });
-        }
-      }
-      
-      // 设置下一次检查
-      monitorInterval = setTimeout(runMonitorCycle, checkInterval * 1000);
-    } catch (error) {
-      console.error('[Container Manager] Error in monitor cycle:', error);
-      monitorInterval = setTimeout(runMonitorCycle, 60000); // 出错后等待60秒重试
-    }
-  };
-  
-  // 立即执行第一次
-  await runMonitorCycle();
+
+  // Fire first cycle asynchronously — do NOT block the caller
+  runMonitorCycle();
 }
 
 export function stopMonitoring() {
-  if (monitorInterval) {
-    clearTimeout(monitorInterval);
-    monitorInterval = null;
+  if (monitorTimer) {
+    clearTimeout(monitorTimer);
+    monitorTimer = null;
   }
-  isRunning = false;
+  monitoring = false;
   console.log('[Container Manager] Monitoring stopped');
 }
 
 export function isMonitoring(): boolean {
-  return isRunning;
+  return monitoring;
+}
+
+export function isSequenceRunning(): boolean {
+  return sequencingInProgress;
 }

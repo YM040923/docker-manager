@@ -1,9 +1,11 @@
 import { COOKIE_NAME } from "@shared/const";
+import { containerCreateSchema, containerUpdateSchema, containerReorderSchema, logsListSchema, settingsUpdateSchema } from "@shared/validators";
+import { z } from 'zod';
 
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
-import { getContainerConfigs, createContainerConfig, updateContainerConfig, deleteContainerConfig, getGlobalSettings, updateGlobalSettings, getLogs } from "./db";
+import { getContainerConfigs, createContainerConfig, updateContainerConfig, deleteContainerConfig, reorderContainerConfigs, getGlobalSettings, updateGlobalSettings, getLogs } from "./db";
 import { getContainerStatus, startContainer, restartContainer, getAllContainers } from "./docker";
 import { startContainerSequence, startMonitoring, stopMonitoring, isMonitoring } from "./containerManager";
 import { addLog } from "./db";
@@ -26,7 +28,21 @@ export const appRouter = router({
     list: publicProcedure.query(async () => {
       return await getContainerConfigs();
     }),
-    
+
+    status: publicProcedure.query(async () => {
+      const configs = await getContainerConfigs();
+      const allContainers = await getAllContainers();
+      return configs.map(config => {
+        const found = allContainers.find(dc => dc.name === config.name);
+        return {
+          ...config,
+          dockerStatus: found
+            ? (found.status.includes('Up') ? 'running' : 'stopped')
+            : 'not_found' as const,
+        };
+      });
+    }),
+
     discover: publicProcedure.query(async () => {
       const allContainers = await getAllContainers();
       const configuredContainers = await getContainerConfigs();
@@ -40,11 +56,7 @@ export const appRouter = router({
         }));
     }),
     create: publicProcedure
-      .input((val: any) => ({
-        name: String(val.name),
-        startupDelay: Number(val.startupDelay) || 0,
-        monitor: Boolean(val.monitor),
-      }))
+      .input(containerCreateSchema)
       .mutation(async ({ input }) => {
         const configs = await getContainerConfigs();
         const existing = configs.find(c => c.name === input.name);
@@ -63,11 +75,7 @@ export const appRouter = router({
         });
       }),
     update: publicProcedure
-      .input((val: any) => ({
-        id: Number(val.id),
-        startupDelay: Number(val.startupDelay),
-        monitor: Boolean(val.monitor),
-      }))
+      .input(containerUpdateSchema)
       .mutation(async ({ input }) => {
         return await updateContainerConfig(input.id, {
           startupDelay: input.startupDelay,
@@ -75,21 +83,14 @@ export const appRouter = router({
         });
       }),
     delete: publicProcedure
-      .input((val: any) => Number(val.id))
+      .input(z.number().int().positive())
       .mutation(async ({ input }) => {
         return await deleteContainerConfig(input);
       }),
     reorder: publicProcedure
-      .input((val: any) => ({
-        items: Array.isArray(val.items) ? val.items.map((item: any) => ({
-          id: Number(item.id),
-          startupOrder: Number(item.startupOrder),
-        })) : [],
-      }))
+      .input(containerReorderSchema)
       .mutation(async ({ input }) => {
-        for (const item of input.items) {
-          await updateContainerConfig(item.id, { startupOrder: item.startupOrder });
-        }
+        await reorderContainerConfigs(input.items);
       }),
   }),
 
@@ -99,9 +100,7 @@ export const appRouter = router({
       return settings || { checkInterval: 60 };
     }),
     update: publicProcedure
-      .input((val: any) => ({
-        checkInterval: Number(val.checkInterval) || 60,
-      }))
+      .input(settingsUpdateSchema)
       .mutation(async ({ input }) => {
         return await updateGlobalSettings({ checkInterval: input.checkInterval });
       }),
@@ -109,9 +108,7 @@ export const appRouter = router({
 
   logs: router({
     list: publicProcedure
-      .input((val: any) => ({
-        limit: Number(val?.limit) || 100,
-      }))
+      .input(logsListSchema)
       .query(async ({ input }) => {
         return await getLogs(input.limit);
       }),
@@ -119,19 +116,19 @@ export const appRouter = router({
 
   management: router({
     getStatus: publicProcedure
-      .input((val: any) => String(val.containerName))
+      .input(z.string().min(1))
       .query(async ({ input }) => {
         const status = await getContainerStatus(input);
         return { containerName: input, status };
       }),
-    
+
     startSequence: publicProcedure.mutation(async () => {
-      await startContainerSequence();
+      startContainerSequence();
       return { success: true };
     }),
-    
+
     startContainer: publicProcedure
-      .input((val: any) => String(val.containerName))
+      .input(z.string().min(1))
       .mutation(async ({ input }) => {
         try {
           const success = await startContainer(input);
@@ -160,7 +157,7 @@ export const appRouter = router({
       }),
     
     restartContainer: publicProcedure
-      .input((val: any) => String(val.containerName))
+      .input(z.string().min(1))
       .mutation(async ({ input }) => {
         try {
           const success = await restartContainer(input);
@@ -190,7 +187,8 @@ export const appRouter = router({
     
     startMonitoring: publicProcedure.mutation(async () => {
       if (!isMonitoring()) {
-        await startMonitoring();
+        await startContainerSequence();
+        startMonitoring();
       }
       return { success: true, monitoring: true };
     }),

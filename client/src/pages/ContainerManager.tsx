@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'wouter';
 import { trpc } from '@/lib/trpc';
 import { GripVertical, Trash2, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -14,6 +15,7 @@ export default function ContainerManager() {
   const updateMutation = trpc.containers.update.useMutation();
   const deleteMutation = trpc.containers.delete.useMutation();
   const reorderMutation = trpc.containers.reorder.useMutation();
+  const [, navigate] = useLocation();
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editValues, setEditValues] = useState<Record<number, { delay: string; monitor: boolean }>>({});
@@ -116,7 +118,7 @@ export default function ContainerManager() {
           {containers.length === 0 ? (
             <Card className="card-elevated text-center py-12">
               <p className="text-muted-foreground mb-4">暂无容器配置</p>
-              <Button className="bg-primary">返回仪表盘添加容器</Button>
+              <Button className="bg-primary" onClick={() => navigate('/')}>返回仪表盘添加容器</Button>
             </Card>
           ) : (
             <div className="space-y-3">

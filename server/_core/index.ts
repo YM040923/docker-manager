@@ -8,6 +8,7 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { initializeContainerManager } from "../init";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -61,6 +62,13 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
+
+  // 生产环境下自动初始化容器管理
+  if (process.env.NODE_ENV === 'production') {
+    initializeContainerManager().catch(err => {
+      console.error('[Server] Container manager initialization failed:', err);
+    });
+  }
 }
 
 startServer().catch(console.error);

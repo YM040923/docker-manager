@@ -116,8 +116,8 @@ export default function Logs() {
             </Card>
           ) : (
             <div className="space-y-2">
-              {logs.map((log, index) => (
-                <Card key={index} className="card-elevated">
+              {logs.map((log) => (
+                <Card key={log.id} className="card-elevated">
                   <div className="flex items-start gap-4">
                     {/* 事件图标 */}
                     <div className="flex-shrink-0 pt-1">

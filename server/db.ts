@@ -113,6 +113,18 @@ export async function deleteContainerConfig(id: number) {
   await db.delete(containerConfigs).where(eq(containerConfigs.id, id));
 }
 
+export async function reorderContainerConfigs(items: Array<{ id: number; startupOrder: number }>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await Promise.all(
+    items.map(item =>
+      db.update(containerConfigs)
+        .set({ startupOrder: item.startupOrder })
+        .where(eq(containerConfigs.id, item.id))
+    )
+  );
+}
+
 export async function getGlobalSettings() {
   const db = await getDb();
   if (!db) return null;
