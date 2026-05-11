@@ -128,6 +128,11 @@ export const appRouter = router({
       .input(z.string().min(1))
       .mutation(async ({ input }) => {
         try {
+          // 验证容器在管理列表中
+          const configs = await getContainerConfigs();
+          if (!configs.find(c => c.name === input)) {
+            throw new TRPCError({ code: 'NOT_FOUND', message: '容器不在管理列表中' });
+          }
           const success = await startContainer(input);
           if (success) {
             await addLog({
@@ -157,6 +162,10 @@ export const appRouter = router({
       .input(z.string().min(1))
       .mutation(async ({ input }) => {
         try {
+          const configs = await getContainerConfigs();
+          if (!configs.find(c => c.name === input)) {
+            throw new TRPCError({ code: 'NOT_FOUND', message: '容器不在管理列表中' });
+          }
           const success = await restartContainer(input);
           if (success) {
             await addLog({

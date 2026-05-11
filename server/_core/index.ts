@@ -13,6 +13,23 @@ import { initializeContainerManager } from "../init";
 import { ENV } from "./env";
 import { AUTH_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 
+// Simple in-memory rate limiter for login
+const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+const LOGIN_RATE_LIMIT = 5;      // max attempts
+const LOGIN_RATE_WINDOW = 60000; // per minute
+
+function checkLoginRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = loginAttempts.get(ip);
+  if (!entry || now > entry.resetAt) {
+    loginAttempts.set(ip, { count: 1, resetAt: now + LOGIN_RATE_WINDOW });
+    return true;
+  }
+  if (entry.count >= LOGIN_RATE_LIMIT) return false;
+  entry.count++;
+  return true;
+}
+
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
     const server = net.createServer();
@@ -33,16 +50,26 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 }
 
 async function startServer() {
+  if (ENV.isProduction && (!ENV.adminUsername || !ENV.adminPassword)) {
+    console.error('[Server] ADMIN_USERNAME and ADMIN_PASSWORD must be set in production');
+    process.exit(1);
+  }
+
   const app = express();
   const server = createServer(app);
   // Configure body parser with larger size limit for file uploads
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  app.use(express.json({ limit: "1mb" }));
+  app.use(express.urlencoded({ limit: "1mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
 
   // === 本地账号密码认证 ===
   app.post("/api/login", express.json(), async (req, res) => {
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    if (!checkLoginRateLimit(ip)) {
+      res.status(429).json({ success: false, message: "登录尝试过于频繁，请稍后再试" });
+      return;
+    }
     const { username, password } = req.body || {};
     if (username !== ENV.adminUsername || password !== ENV.adminPassword) {
       res.status(401).json({ success: false, message: "用户名或密码错误" });
@@ -65,6 +92,7 @@ async function startServer() {
       httpOnly: true,
       path: "/",
       sameSite: "lax",
+      secure: ENV.isProduction,
       maxAge: ONE_YEAR_MS,
     });
 
