@@ -3,12 +3,15 @@ import express from "express";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
+import { SignJWT } from "jose";
 import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
-import { createContext } from "./context";
+import { createContext, authenticateRequest } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { initializeContainerManager } from "../init";
+import { ENV } from "./env";
+import { AUTH_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -37,6 +40,47 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+
+  // === 本地账号密码认证 ===
+  app.post("/api/login", express.json(), async (req, res) => {
+    const { username, password } = req.body || {};
+    if (username !== ENV.adminUsername || password !== ENV.adminPassword) {
+      res.status(401).json({ success: false, message: "用户名或密码错误" });
+      return;
+    }
+
+    const user = {
+      username: ENV.adminUsername,
+      role: "admin",
+      loginTime: Date.now(),
+    };
+
+    const secretKey = new TextEncoder().encode(ENV.cookieSecret);
+    const token = await new SignJWT(user as any)
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime("365d")
+      .sign(secretKey);
+
+    res.cookie(AUTH_COOKIE_NAME, token, {
+      httpOnly: true,
+      path: "/",
+      sameSite: "lax",
+      maxAge: ONE_YEAR_MS,
+    });
+
+    res.json({ success: true, username: ENV.adminUsername });
+  });
+
+  app.post("/api/logout", (_req, res) => {
+    res.clearCookie(AUTH_COOKIE_NAME, { path: "/" });
+    res.json({ success: true });
+  });
+
+  app.get("/api/auth/check", async (req, res) => {
+    const user = await authenticateRequest(req);
+    res.json({ authenticated: !!user, username: user?.name || null });
+  });
+
   // tRPC API
   app.use(
     "/api/trpc",

@@ -1,10 +1,8 @@
-import { COOKIE_NAME } from "@shared/const";
 import { containerCreateSchema, containerUpdateSchema, containerReorderSchema, logsListSchema, settingsUpdateSchema } from "@shared/validators";
 import { z } from 'zod';
 
-import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { getContainerConfigs, createContainerConfig, updateContainerConfig, deleteContainerConfig, reorderContainerConfigs, getGlobalSettings, updateGlobalSettings, getLogs } from "./db";
 import { getContainerStatus, startContainer, restartContainer, getAllContainers } from "./docker";
 import { startContainerSequence, startMonitoring, stopMonitoring, isMonitoring } from "./containerManager";
@@ -16,8 +14,7 @@ export const appRouter = router({
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      ctx.res.clearCookie("docker_manager_auth", { path: "/" });
       return {
         success: true,
       } as const;
@@ -25,11 +22,11 @@ export const appRouter = router({
   }),
 
   containers: router({
-    list: publicProcedure.query(async () => {
+    list: protectedProcedure.query(async () => {
       return await getContainerConfigs();
     }),
 
-    status: publicProcedure.query(async () => {
+    status: protectedProcedure.query(async () => {
       const configs = await getContainerConfigs();
       const allContainers = await getAllContainers();
       return configs.map(config => {
@@ -43,11 +40,11 @@ export const appRouter = router({
       });
     }),
 
-    discover: publicProcedure.query(async () => {
+    discover: protectedProcedure.query(async () => {
       const allContainers = await getAllContainers();
       const configuredContainers = await getContainerConfigs();
       const configuredNames = new Set(configuredContainers.map(c => c.name));
-      
+
       return allContainers
         .filter(c => !configuredNames.has(c.name))
         .map(c => ({
@@ -55,7 +52,7 @@ export const appRouter = router({
           status: c.status,
         }));
     }),
-    create: publicProcedure
+    create: protectedProcedure
       .input(containerCreateSchema)
       .mutation(async ({ input }) => {
         const configs = await getContainerConfigs();
@@ -74,7 +71,7 @@ export const appRouter = router({
           startupOrder: maxOrder + 1,
         });
       }),
-    update: publicProcedure
+    update: protectedProcedure
       .input(containerUpdateSchema)
       .mutation(async ({ input }) => {
         return await updateContainerConfig(input.id, {
@@ -82,12 +79,12 @@ export const appRouter = router({
           monitor: input.monitor ? 1 : 0,
         });
       }),
-    delete: publicProcedure
+    delete: protectedProcedure
       .input(z.number().int().positive())
       .mutation(async ({ input }) => {
         return await deleteContainerConfig(input);
       }),
-    reorder: publicProcedure
+    reorder: protectedProcedure
       .input(containerReorderSchema)
       .mutation(async ({ input }) => {
         await reorderContainerConfigs(input.items);
@@ -95,11 +92,11 @@ export const appRouter = router({
   }),
 
   settings: router({
-    get: publicProcedure.query(async () => {
+    get: protectedProcedure.query(async () => {
       const settings = await getGlobalSettings();
       return settings || { checkInterval: 60 };
     }),
-    update: publicProcedure
+    update: protectedProcedure
       .input(settingsUpdateSchema)
       .mutation(async ({ input }) => {
         return await updateGlobalSettings({ checkInterval: input.checkInterval });
@@ -107,7 +104,7 @@ export const appRouter = router({
   }),
 
   logs: router({
-    list: publicProcedure
+    list: protectedProcedure
       .input(logsListSchema)
       .query(async ({ input }) => {
         return await getLogs(input.limit);
@@ -115,19 +112,19 @@ export const appRouter = router({
   }),
 
   management: router({
-    getStatus: publicProcedure
+    getStatus: protectedProcedure
       .input(z.string().min(1))
       .query(async ({ input }) => {
         const status = await getContainerStatus(input);
         return { containerName: input, status };
       }),
 
-    startSequence: publicProcedure.mutation(async () => {
+    startSequence: protectedProcedure.mutation(async () => {
       startContainerSequence();
       return { success: true };
     }),
 
-    startContainer: publicProcedure
+    startContainer: protectedProcedure
       .input(z.string().min(1))
       .mutation(async ({ input }) => {
         try {
@@ -155,8 +152,8 @@ export const appRouter = router({
           return { success: false };
         }
       }),
-    
-    restartContainer: publicProcedure
+
+    restartContainer: protectedProcedure
       .input(z.string().min(1))
       .mutation(async ({ input }) => {
         try {
@@ -184,21 +181,21 @@ export const appRouter = router({
           return { success: false };
         }
       }),
-    
-    startMonitoring: publicProcedure.mutation(async () => {
+
+    startMonitoring: protectedProcedure.mutation(async () => {
       if (!isMonitoring()) {
         await startContainerSequence();
         startMonitoring();
       }
       return { success: true, monitoring: true };
     }),
-    
-    stopMonitoring: publicProcedure.mutation(async () => {
+
+    stopMonitoring: protectedProcedure.mutation(async () => {
       stopMonitoring();
       return { success: true, monitoring: false };
     }),
-    
-    isMonitoring: publicProcedure.query(async () => {
+
+    isMonitoring: protectedProcedure.query(async () => {
       return { monitoring: isMonitoring() };
     }),
   }),
