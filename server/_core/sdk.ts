@@ -276,7 +276,7 @@ class SDKServer {
     }
 
     const sessionUserId = session.openId;
-    const signedInAt = new Date();
+    const signedInAt = new Date().toISOString();
     let user = await db.getUserByOpenId(sessionUserId);
 
     // If user not in DB, sync from OAuth server automatically
@@ -321,7 +321,7 @@ export type AuthenticatedUser = User & {
 function buildCronUser(
   userInfo: GetUserInfoWithJwtResponse
 ): AuthenticatedUser {
-  const now = new Date();
+  const now = new Date().toISOString();
   return {
     id: -1,
     openId: userInfo.openId,
@@ -334,7 +334,7 @@ function buildCronUser(
     lastSignedIn: now,
     taskUid: userInfo.taskUid ?? undefined,
     isCron: true,
-  } as AuthenticatedUser;
+  } as unknown as AuthenticatedUser;
 }
 
 export const sdk = new SDKServer();

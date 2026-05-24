@@ -33,6 +33,7 @@ export async function authenticateRequest(req: CreateExpressContextOptions["req"
 
     if (!payload.username || payload.role !== 'admin') return null;
 
+    const now = new Date().toISOString();
     return {
       id: 0,
       openId: `local:${payload.username}`,
@@ -40,9 +41,9 @@ export async function authenticateRequest(req: CreateExpressContextOptions["req"
       role: 'admin',
       email: null,
       loginMethod: 'local',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      lastSignedIn: new Date(),
+      createdAt: now,
+      updatedAt: now,
+      lastSignedIn: now,
     };
   } catch {
     return null;

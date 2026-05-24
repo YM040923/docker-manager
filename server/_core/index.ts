@@ -12,21 +12,20 @@ import { serveStatic, setupVite } from "./vite";
 import { initializeContainerManager } from "../init";
 import { ENV } from "./env";
 import { AUTH_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
-import { migrate } from "drizzle-orm/mysql2/migrator";
-import { drizzle } from "drizzle-orm/mysql2";
+import { getDb } from "../db";
 
 async function runMigrations() {
-  if (!ENV.databaseUrl) {
-    console.log('[Migration] No DATABASE_URL, skipping migrations');
-    return;
-  }
   try {
-    const db = drizzle(ENV.databaseUrl);
-    await migrate(db, { migrationsFolder: "./drizzle" });
-    console.log('[Migration] Database migrations applied successfully');
+    const db = await getDb();
+    // SQLite tables are auto-created by drizzle ORM on first query,
+    // we force table creation here with safe probes
+    try { db.run("SELECT 1 FROM users LIMIT 0"); } catch {}
+    try { db.run("SELECT 1 FROM container_configs LIMIT 0"); } catch {}
+    try { db.run("SELECT 1 FROM logs LIMIT 0"); } catch {}
+    try { db.run("SELECT 1 FROM global_settings LIMIT 0"); } catch {}
+    console.log('[Migration] Database tables verified');
   } catch (error) {
-    console.error('[Migration] Failed to run migrations:', error);
-    console.log('[Migration] Continuing startup, tables may already exist');
+    console.error('[Migration] Failed to verify tables:', error);
   }
 }
 

@@ -1,67 +1,48 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { int, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-/**
- * Core user table backing auth flow.
- * Extend this file with additional tables as your product grows.
- * Columns use camelCase to match both database fields and generated types.
- */
-export const users = mysqlTable("users", {
-  /**
-   * Surrogate primary key. Auto-incremented numeric value managed by the database.
-   * Use this for relations between tables.
-   */
-  id: int("id").autoincrement().primaryKey(),
-  /** Manus OAuth identifier (openId) returned from the OAuth callback. Unique per user. */
-  openId: varchar("openId", { length: 64 }).notNull().unique(),
+export const users = sqliteTable("users", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  openId: text("openId").notNull().unique(),
   name: text("name"),
-  email: varchar("email", { length: 320 }),
-  loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-  lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
+  email: text("email"),
+  loginMethod: text("loginMethod"),
+  role: text("role", { enum: ["user", "admin"] }).notNull().default("user"),
+  createdAt: text("createdAt").notNull().default(new Date().toISOString()),
+  updatedAt: text("updatedAt").notNull().default(new Date().toISOString()),
+  lastSignedIn: text("lastSignedIn").notNull().default(new Date().toISOString()),
 });
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-/**
- * 容器配置表
- */
-export const containerConfigs = mysqlTable("container_configs", {
-  id: int("id").autoincrement().primaryKey(),
-  name: varchar("name", { length: 255 }).notNull(),
+export const containerConfigs = sqliteTable("container_configs", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
   startupOrder: int("startup_order").notNull().default(0),
   startupDelay: int("startup_delay").notNull().default(0),
   monitor: int("monitor").notNull().default(1),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  createdAt: text("createdAt").notNull().default(new Date().toISOString()),
+  updatedAt: text("updatedAt").notNull().default(new Date().toISOString()),
 });
 
 export type ContainerConfig = typeof containerConfigs.$inferSelect;
 export type InsertContainerConfig = typeof containerConfigs.$inferInsert;
 
-/**
- * 日志表
- */
-export const logs = mysqlTable("logs", {
-  id: int("id").autoincrement().primaryKey(),
-  containerName: varchar("container_name", { length: 255 }).notNull(),
-  eventType: mysqlEnum("event_type", ["startup", "restart", "status_check", "error"]).notNull(),
+export const logs = sqliteTable("logs", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  containerName: text("container_name").notNull(),
+  eventType: text("event_type", { enum: ["startup", "restart", "status_check", "error"] }).notNull(),
   message: text("message").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  createdAt: text("createdAt").notNull().default(new Date().toISOString()),
 });
 
 export type Log = typeof logs.$inferSelect;
 export type InsertLog = typeof logs.$inferInsert;
 
-/**
- * 全局设置表
- */
-export const globalSettings = mysqlTable("global_settings", {
-  id: int("id").autoincrement().primaryKey(),
+export const globalSettings = sqliteTable("global_settings", {
+  id: int("id").primaryKey({ autoIncrement: true }),
   checkInterval: int("check_interval").notNull().default(60),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: text("updatedAt").notNull().default(new Date().toISOString()),
 });
 
 export type GlobalSettings = typeof globalSettings.$inferSelect;

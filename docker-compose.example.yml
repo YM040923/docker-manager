@@ -1,48 +1,18 @@
 services:
-  mysql:
-    image: mysql:8.0
-    container_name: docker-manager-mysql
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: CHANGE_ME
-      MYSQL_DATABASE: docker_manager
-      MYSQL_USER: docker_manager
-      MYSQL_PASSWORD: CHANGE_ME
-    volumes:
-      - mysql_data:/var/lib/mysql
-    networks:
-      - docker-manager-network
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      timeout: 20s
-      retries: 10
-
-  docker-manager-ui:
+  docker-manager:
     image: ymzwh/docker-manager:latest
-    container_name: docker-manager-ui
+    container_name: docker-manager
     restart: always
     ports:
       - "13000:13000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - docker_manager_data:/app/data
     environment:
-      # === 必填 ===
-      DATABASE_URL: mysql://docker_manager:CHANGE_ME@mysql:3306/docker_manager
-      JWT_SECRET: CHANGE_ME_TO_RANDOM_STRING
-      ADMIN_USERNAME: admin
-      ADMIN_PASSWORD: CHANGE_ME
-
-      # === 可选 ===
-      TZ: Asia/Shanghai
-    depends_on:
-      mysql:
-        condition: service_healthy
-    networks:
-      - docker-manager-network
+      JWT_SECRET: CHANGE_ME_TO_RANDOM_STRING   # 必填：随机字符串
+      ADMIN_USERNAME: admin                     # 必填：登录用户名
+      ADMIN_PASSWORD: CHANGE_ME                 # 必填：登录密码
+      TZ: Asia/Shanghai                         # 可选：时区
 
 volumes:
-  mysql_data:
-
-networks:
-  docker-manager-network:
-    driver: bridge
+  docker_manager_data:
