@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'wouter';
-import { LayoutDashboard, Settings, Boxes, FileText } from 'lucide-react';
+import { LayoutDashboard, Settings, Boxes, FileText, LogOut } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function Navigation() {
   const [location] = useLocation();
@@ -13,6 +14,15 @@ export default function Navigation() {
     { path: '/logs', icon: FileText, label: '日志' },
   ];
 
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/logout', { method: 'POST' });
+      window.location.reload();
+    } catch {
+      toast.error('退出失败');
+    }
+  };
+
   return (
     <nav className="border-b border-border/50 bg-card/50 backdrop-blur-sm sticky top-0 z-50">
       <div className="container flex items-center justify-between py-4">
@@ -25,8 +35,8 @@ export default function Navigation() {
           {navItems.map(({ path, icon: Icon, label }) => (
             <Link key={path} href={path}>
               <div className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors cursor-pointer ${
-                isActive(path) 
-                  ? 'bg-primary text-primary-foreground' 
+                isActive(path)
+                  ? 'bg-primary text-primary-foreground'
                   : 'text-foreground hover:bg-muted'
               }`}>
                 <Icon className="w-4 h-4" />
@@ -34,6 +44,13 @@ export default function Navigation() {
               </div>
             </Link>
           ))}
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors cursor-pointer text-foreground hover:bg-muted ml-4"
+          >
+            <LogOut className="w-4 h-4" />
+            <span className="text-sm font-medium">退出</span>
+          </button>
         </div>
       </div>
     </nav>

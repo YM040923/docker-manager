@@ -1,5 +1,5 @@
 import { getContainerConfigs, getGlobalSettings, addLog } from './db';
-import { getContainerStatus, startContainer, restartContainer } from './docker';
+import { getContainerStatus, startContainer, restartContainer, getAllContainers } from './docker';
 
 let sequencingInProgress = false;
 let monitoring = false;
@@ -7,6 +7,40 @@ let monitorTimer: ReturnType<typeof setTimeout> | null = null;
 
 const MAX_RETRIES = 20;
 const RETRY_DELAY_MS = 5000;
+
+// 日志清理：保留最近 30 天，监控周期结束后清理
+let lastLogCleanup = 0;
+const LOG_CLEANUP_INTERVAL = 3600000; // 每小时最多清理一次
+
+async function pruneOldLogs() {
+  const now = Date.now();
+  if (now - lastLogCleanup < LOG_CLEANUP_INTERVAL) return;
+  lastLogCleanup = now;
+
+  try {
+    const { getDb } = await import('./db');
+    const db = await getDb();
+    if (!db) return;
+    // 只保留最近 1000 条日志
+    const client = db.$client;
+    const result = client.prepare("SELECT id FROM logs ORDER BY id DESC LIMIT 1 OFFSET 1000").get() as { id: number } | undefined;
+    if (result) {
+      client.prepare("DELETE FROM logs WHERE id <= ?").run(result.id);
+    }
+  } catch (e) {
+    // silent
+  }
+}
+
+// 检查 Docker 是否可用
+export async function checkDockerHealth(): Promise<boolean> {
+  try {
+    await getAllContainers();
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 async function ensureContainerRunning(
   containerName: string,
@@ -30,7 +64,6 @@ async function ensureContainerRunning(
       const success = await fn(containerName);
 
       if (success) {
-        // Verify it actually came up
         const verifyStatus = await getContainerStatus(containerName);
         if (verifyStatus === 'running') {
           await addLog({
@@ -41,7 +74,6 @@ async function ensureContainerRunning(
           console.log(`[Container Manager] ${containerName} ${action} confirmed running`);
           return true;
         }
-        // Not confirmed running yet, continue loop
         console.log(`[Container Manager] ${containerName} ${action} returned success but not yet running, re-checking...`);
       } else {
         await addLog({
@@ -66,7 +98,6 @@ async function ensureContainerRunning(
     }
   }
 
-  // Max retries exceeded
   await addLog({
     containerName,
     eventType: 'error',
@@ -96,7 +127,6 @@ export async function startContainerSequence() {
         console.log(`[Container Manager] ${config.name} running, waiting ${config.startupDelay}s before next container...`);
         await new Promise(resolve => setTimeout(resolve, config.startupDelay * 1000));
       } else if (!success) {
-        // Still proceed to next container even if this one failed
         console.log(`[Container Manager] ${config.name} failed to start, moving to next container`);
       }
     }
@@ -118,7 +148,7 @@ async function runMonitorCycle() {
     console.log(`[Container Manager] Running monitor cycle (${configs.length} containers configured)`);
 
     for (const config of configs) {
-      if (!monitoring) break; // Allow immediate stop
+      if (!monitoring) break;
       if (config.monitor !== 1) continue;
 
       console.log(`[Container Manager] Checking container: ${config.name}`);
@@ -129,6 +159,9 @@ async function runMonitorCycle() {
       }
     }
 
+    // 清理旧日志
+    await pruneOldLogs();
+
     // Schedule next cycle
     if (monitoring) {
       monitorTimer = setTimeout(runMonitorCycle, checkInterval * 1000);
@@ -136,7 +169,6 @@ async function runMonitorCycle() {
   } catch (error) {
     console.error('[Container Manager] Error in monitor cycle:', error);
     if (monitoring) {
-      // Retry after 60s on error
       monitorTimer = setTimeout(runMonitorCycle, 60000);
     }
   }
@@ -151,7 +183,6 @@ export function startMonitoring() {
   monitoring = true;
   console.log('[Container Manager] Starting container monitoring...');
 
-  // Fire first cycle asynchronously — do NOT block the caller
   runMonitorCycle();
 }
 

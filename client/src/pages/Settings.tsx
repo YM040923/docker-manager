@@ -56,6 +56,11 @@ export default function Settings() {
 
         <div className="container py-8">
           <div className="max-w-2xl">
+            {isLoading ? (
+              <Card className="card-elevated text-center py-8">
+                <p className="text-muted-foreground">加载中...</p>
+              </Card>
+            ) : (
             <Card className="card-elevated">
               <div className="space-y-6">
                 {/* 检查间隔设置 */}
@@ -123,6 +128,7 @@ export default function Settings() {
                 </div>
               </div>
             </Card>
+            )}
 
             {/* 日志说明 */}
             <Card className="card-elevated mt-6">

@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useLocation } from 'wouter';
 import { trpc } from '@/lib/trpc';
-import { GripVertical, Trash2, Play } from 'lucide-react';
+import { GripVertical, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 import { ContainerDiscovery } from '@/components/ContainerDiscovery';
 
 export default function ContainerManager() {
-  const { data: containers = [], refetch: refetchContainers } = trpc.containers.list.useQuery();
+  const { data: containers = [], isLoading, refetch: refetchContainers } = trpc.containers.list.useQuery();
   const updateMutation = trpc.containers.update.useMutation();
   const deleteMutation = trpc.containers.delete.useMutation();
   const reorderMutation = trpc.containers.reorder.useMutation();
@@ -36,8 +36,11 @@ export default function ContainerManager() {
 
     if (draggedIndex === -1 || targetIndex === -1) return;
 
-    const newContainers = [...containers];
-    [newContainers[draggedIndex], newContainers[targetIndex]] = [newContainers[targetIndex], newContainers[draggedIndex]];
+    // 从数组中移除被拖拽的元素
+    const newContainers = containers.filter(c => c.id !== draggedId);
+    // 在目标位置插入
+    const insertAt = containers.findIndex(c => c.id === targetId);
+    newContainers.splice(insertAt, 0, containers[draggedIndex]);
 
     const reorderedItems = newContainers.map((c, idx) => ({
       id: c.id,
@@ -115,7 +118,11 @@ export default function ContainerManager() {
         </div>
 
         <div className="container py-8">
-          {containers.length === 0 ? (
+          {isLoading ? (
+            <Card className="card-elevated text-center py-12">
+              <p className="text-muted-foreground">加载中...</p>
+            </Card>
+          ) : containers.length === 0 ? (
             <Card className="card-elevated text-center py-12">
               <p className="text-muted-foreground mb-4">暂无容器配置</p>
               <Button className="bg-primary" onClick={() => navigate('/')}>返回仪表盘添加容器</Button>
