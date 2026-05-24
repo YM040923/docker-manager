@@ -1,0 +1,15 @@
+node_modules
+.git
+.gitignore
+.dockerignore
+dist
+.env
+.env.*
+.manus-logs
+.manus
+.webdev
+*.md
+*.sh
+!DEPLOY_ON_FEINU.sh
+tmp
+temp

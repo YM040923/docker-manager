@@ -12,6 +12,23 @@ import { serveStatic, setupVite } from "./vite";
 import { initializeContainerManager } from "../init";
 import { ENV } from "./env";
 import { AUTH_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { migrate } from "drizzle-orm/mysql2/migrator";
+import { drizzle } from "drizzle-orm/mysql2";
+
+async function runMigrations() {
+  if (!ENV.databaseUrl) {
+    console.log('[Migration] No DATABASE_URL, skipping migrations');
+    return;
+  }
+  try {
+    const db = drizzle(ENV.databaseUrl);
+    await migrate(db, { migrationsFolder: "./drizzle" });
+    console.log('[Migration] Database migrations applied successfully');
+  } catch (error) {
+    console.error('[Migration] Failed to run migrations:', error);
+    console.log('[Migration] Continuing startup, tables may already exist');
+  }
+}
 
 // Simple in-memory rate limiter for login
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
@@ -50,9 +67,17 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 }
 
 async function startServer() {
-  if (ENV.isProduction && (!ENV.adminUsername || !ENV.adminPassword)) {
-    console.error('[Server] ADMIN_USERNAME and ADMIN_PASSWORD must be set in production');
-    process.exit(1);
+  if (ENV.isProduction) {
+    let fatal = false;
+    if (!ENV.adminUsername || !ENV.adminPassword) {
+      console.error('[Server] ADMIN_USERNAME and ADMIN_PASSWORD must be set in production');
+      fatal = true;
+    }
+    if (!ENV.cookieSecret || ENV.cookieSecret === 'your_jwt_secret_key_here_change_me' || ENV.cookieSecret === 'CHANGE_ME_TO_RANDOM_STRING') {
+      console.error('[Server] JWT_SECRET must be set to a random string (not the default value)');
+      fatal = true;
+    }
+    if (fatal) process.exit(1);
   }
 
   const app = express();
@@ -108,6 +133,9 @@ async function startServer() {
     const user = await authenticateRequest(req);
     res.json({ authenticated: !!user, username: user?.name || null });
   });
+
+  // 自动运行数据库迁移（生产环境）
+  await runMigrations();
 
   // tRPC API
   app.use(
