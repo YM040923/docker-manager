@@ -109,5 +109,13 @@ temp/
 # Webdev artifacts (checkpoint zips, migrations, etc.)
 .webdev/
 
+# fnOS native generated package payload
+packaging/fnos-native/*/app/server/
+packaging/fnos-native/*/app/ui/assets/
+packaging/fnos-native/*/app/ui/__manus__/
+packaging/fnos-native/*/app/ui/index.html
+packaging/fnos-native/*/app/ui/.gitkeep
+packaging/fnos-native/**/*.fpk
+
 # Manus version file (auto-generated, not part of source)
 client/public/__manus__/version.json

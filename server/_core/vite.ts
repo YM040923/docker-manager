@@ -5,6 +5,7 @@ import { nanoid } from "nanoid";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import viteConfig from "../../vite.config";
+import { ENV } from "./env";
 
 export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
@@ -47,9 +48,7 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  // Use process.cwd() as base since esbuild doesn't polyfill import.meta.dirname
-  const baseDir = process.cwd();
-  const distPath = path.resolve(baseDir, "dist", "public");
+  const distPath = ENV.staticDir || path.resolve(process.cwd(), "dist", "public");
   if (!fs.existsSync(distPath)) {
     console.error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`

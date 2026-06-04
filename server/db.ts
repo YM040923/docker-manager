@@ -6,7 +6,7 @@ import { ENV } from './_core/env';
 import path from "path";
 import fs from "fs";
 
-const DB_PATH = process.env.SQLITE_PATH || path.join(process.cwd(), "data", "docker-manager.db");
+const DB_PATH = ENV.sqlitePath || path.join(process.cwd(), "data", "docker-manager.db");
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -23,6 +23,7 @@ export async function getDb() {
       ensureDataDir();
       const sqlite = new Database(DB_PATH);
       sqlite.pragma("journal_mode = WAL");
+      initializeSchema(sqlite);
       _db = drizzle(sqlite);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
@@ -30,6 +31,50 @@ export async function getDb() {
     }
   }
   return _db;
+}
+
+function initializeSchema(sqlite: Database.Database) {
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      openId TEXT NOT NULL UNIQUE,
+      name TEXT,
+      email TEXT,
+      loginMethod TEXT,
+      role TEXT NOT NULL DEFAULT 'user',
+      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      updatedAt TEXT NOT NULL DEFAULT (datetime('now')),
+      lastSignedIn TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS container_configs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      startup_order INTEGER NOT NULL DEFAULT 0,
+      startup_delay INTEGER NOT NULL DEFAULT 0,
+      monitor INTEGER NOT NULL DEFAULT 1,
+      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      updatedAt TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      container_name TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      message TEXT NOT NULL,
+      createdAt TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS global_settings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      check_interval INTEGER NOT NULL DEFAULT 60,
+      updatedAt TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+}
+
+export function getSqlitePath() {
+  return DB_PATH;
 }
 
 export async function upsertUser(user: InsertUser): Promise<void> {

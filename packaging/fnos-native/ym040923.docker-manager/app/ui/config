@@ -1,0 +1,18 @@
+{
+  ".url": {
+    "ym040923.docker-manager.Application": {
+      "title": "Docker Manager",
+      "desc": "Docker container startup order and monitoring manager",
+      "icon": "images/icon_{0}.png",
+      "type": "iframe",
+      "protocol": "",
+      "gatewaySocket": "app.sock",
+      "gatewayPrefix": "/app/ym040923-docker-manager",
+      "url": "/app/ym040923-docker-manager",
+      "allUsers": false,
+      "control": {
+        "accessPerm": "readonly"
+      }
+    }
+  }
+}

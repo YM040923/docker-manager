@@ -19,7 +19,52 @@ function parseCookies(cookieHeader: string): Record<string, string> {
   return cookies;
 }
 
+function createContextUser(params: {
+  id: number;
+  openId: string;
+  name: string;
+  role: "user" | "admin";
+  loginMethod: string;
+}): User {
+  const now = new Date().toISOString();
+  return {
+    id: params.id,
+    openId: params.openId,
+    name: params.name,
+    role: params.role,
+    email: null,
+    loginMethod: params.loginMethod,
+    createdAt: now,
+    updatedAt: now,
+    lastSignedIn: now,
+  };
+}
+
+function getHeader(req: CreateExpressContextOptions["req"], name: string) {
+  const value = req.headers[name.toLowerCase()];
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function authenticateFnosGateway(req: CreateExpressContextOptions["req"]): User | null {
+  const isAdmin = getHeader(req, "x-trim-isadmin") === "true";
+  if (!isAdmin) return null;
+
+  const uid = getHeader(req, "x-trim-userid") || "0";
+  const username = getHeader(req, "x-trim-username") || "fnos-admin";
+  return createContextUser({
+    id: Number(uid) || 0,
+    openId: `fnos:${uid}`,
+    name: username,
+    role: "admin",
+    loginMethod: "fnos-gateway",
+  });
+}
+
 export async function authenticateRequest(req: CreateExpressContextOptions["req"]): Promise<User | null> {
+  if (ENV.isFnosNative) {
+    return authenticateFnosGateway(req);
+  }
+
   try {
     const cookieHeader = req.headers.cookie;
     if (!cookieHeader) return null;
@@ -33,18 +78,13 @@ export async function authenticateRequest(req: CreateExpressContextOptions["req"
 
     if (!payload.username || payload.role !== 'admin') return null;
 
-    const now = new Date().toISOString();
-    return {
+    return createContextUser({
       id: 0,
       openId: `local:${payload.username}`,
       name: payload.username as string,
       role: 'admin',
-      email: null,
       loginMethod: 'local',
-      createdAt: now,
-      updatedAt: now,
-      lastSignedIn: now,
-    };
+    });
   } catch {
     return null;
   }

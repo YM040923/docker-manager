@@ -1,38 +1,41 @@
-import { useState } from 'react';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { toast } from 'sonner';
-import { Container } from 'lucide-react';
+import { useState } from "react";
+import { Container } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { appPath } from "@/lib/appBase";
 
 export default function Login({ onLogin }: { onLogin: () => void }) {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (!username.trim() || !password.trim()) {
-      toast.error('请输入用户名和密码');
+      toast.error("请输入用户名和密码");
       return;
     }
+
     setLoading(true);
     try {
-      const res = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch(appPath("/api/login"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ username, password }),
       });
       const data = await res.json();
       if (data.success) {
-        toast.success('登录成功');
+        toast.success("登录成功");
         onLogin();
       } else {
-        toast.error(data.message || '登录失败');
+        toast.error(data.message || "登录失败");
       }
     } catch {
-      toast.error('网络错误');
+      toast.error("网络错误");
     } finally {
       setLoading(false);
     }
@@ -58,7 +61,7 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
               type="text"
               placeholder="请输入用户名"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(event) => setUsername(event.target.value)}
               autoFocus
             />
           </div>
@@ -69,11 +72,11 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
               type="password"
               placeholder="请输入密码"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(event) => setPassword(event.target.value)}
             />
           </div>
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? '登录中...' : '登录'}
+            {loading ? "登录中..." : "登录"}
           </Button>
         </form>
       </Card>

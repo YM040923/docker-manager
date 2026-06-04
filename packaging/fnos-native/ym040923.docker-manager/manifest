@@ -1,0 +1,10 @@
+appname=ym040923.docker-manager
+version=0.1.0
+desc=Docker container startup order and monitoring manager
+arch=x86_64
+display_name=Docker Manager
+maintainer=YM040923
+distributor=YM040923
+desktop_uidir=ui
+desktop_applaunchname=ym040923.docker-manager.Application
+source=thirdparty
