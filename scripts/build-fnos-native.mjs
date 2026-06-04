@@ -92,6 +92,28 @@ function writeIcons() {
   fs.writeFileSync(path.join(packDir, "ICON_256.PNG"), makePng(256));
 }
 
+function resolveFnpack() {
+  const candidates = [
+    process.env.FNPACK,
+    process.env.FNOS_FNPACK,
+    "fnpack",
+    path.join(root, "tools", "fnpack", process.platform === "win32" ? "fnpack.exe" : "fnpack"),
+    path.join(root, "tools", "fnpack", "fnpack"),
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    const result = spawnSync(candidate, ["--help"], {
+      shell: process.platform === "win32",
+      stdio: "ignore",
+    });
+    if (result.status === 0) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
 console.log(`[fnOS] Building web assets with base ${gatewayPrefix}/`);
 run("pnpm", ["run", "build"], {
   env: {
@@ -141,11 +163,12 @@ if (process.platform === "win32") {
 
 fs.chmodSync(path.join(packDir, "cmd", "main"), 0o755);
 
-const fnpack = spawnSync("fnpack", ["--version"], { shell: process.platform === "win32", stdio: "ignore" });
-if (fnpack.status === 0) {
-  run("fnpack", ["build"], { cwd: packDir });
+const fnpack = resolveFnpack();
+if (fnpack) {
+  run(fnpack, ["build"], { cwd: packDir });
 } else {
   console.warn("[fnOS] fnpack was not found. Package tree is prepared, but .fpk was not built.");
+  console.warn("[fnOS] On fnOS/Linux, run `bash scripts/build-fnos-native.sh` to download fnpack and build the .fpk.");
 }
 
 console.log(`[fnOS] Prepared package directory: ${packDir}`);

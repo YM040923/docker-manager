@@ -116,6 +116,7 @@ packaging/fnos-native/*/app/ui/__manus__/
 packaging/fnos-native/*/app/ui/index.html
 packaging/fnos-native/*/app/ui/.gitkeep
 packaging/fnos-native/**/*.fpk
+tools/fnpack/
 
 # Manus version file (auto-generated, not part of source)
 client/public/__manus__/version.json

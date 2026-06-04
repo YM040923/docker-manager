@@ -31,11 +31,11 @@ Build the package on fnOS/Linux so `better-sqlite3` is installed for Linux, not 
 ```bash
 git clone https://github.com/YM040923/docker-manager.git
 cd docker-manager
-pnpm install --frozen-lockfile
-pnpm build:fnos
+bash scripts/build-fnos-native.sh
 ```
 
-On Linux/fnOS, `pnpm build:fnos` installs production server dependencies and runs `fnpack build` when `fnpack` is available. The resulting `.fpk` will be created in:
+The wrapper installs dependencies, downloads the verified Linux `fnpack` binary to `tools/fnpack/fnpack` when needed, builds the app, and runs `fnpack build`.
+The resulting `.fpk` will be created in:
 
 ```bash
 packaging/fnos-native/ym040923.docker-manager/
@@ -44,3 +44,4 @@ packaging/fnos-native/ym040923.docker-manager/
 ## Windows Development
 
 On Windows, `pnpm build:fnos` prepares the package tree and verifies the gateway base path, but it does not install production `node_modules` for the package because `better-sqlite3` is a native Linux dependency.
+It also cannot run the Linux `fnpack` binary. Use fnOS/Linux, WSL, or another Linux builder for the final `.fpk`.
