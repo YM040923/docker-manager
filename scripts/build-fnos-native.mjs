@@ -92,6 +92,17 @@ function writeIcons() {
   fs.writeFileSync(path.join(packDir, "ICON_256.PNG"), makePng(256));
 }
 
+function chmodExecutableFiles(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const file = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      chmodExecutableFiles(file);
+    } else if (entry.isFile()) {
+      fs.chmodSync(file, 0o755);
+    }
+  }
+}
+
 function resolveFnpack() {
   const candidates = [
     process.env.FNPACK,
@@ -161,7 +172,7 @@ if (process.platform === "win32") {
   run("pnpm", ["install", "--prod", "--frozen-lockfile"], { cwd: serverDir });
 }
 
-fs.chmodSync(path.join(packDir, "cmd", "main"), 0o755);
+chmodExecutableFiles(path.join(packDir, "cmd"));
 
 const fnpack = resolveFnpack();
 if (fnpack) {
