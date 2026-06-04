@@ -8,3 +8,4 @@ distributor=YM040923
 desktop_uidir=ui
 desktop_applaunchname=ym040923.docker-manager.Application
 source=thirdparty
+install_dep_apps=nodejs_v22

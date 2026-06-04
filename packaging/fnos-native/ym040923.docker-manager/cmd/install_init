@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-mkdir -p "${TRIM_PKGVAR}"
-echo "Docker Manager install init"
+# shellcheck source=common
+source "$(dirname "${BASH_SOURCE[0]}")/common"
+ensure_runtime_dirs
+echo "Docker Manager install init: runtime directories prepared at $VAR_DIR"

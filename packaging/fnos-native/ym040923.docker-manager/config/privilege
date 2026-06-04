@@ -1,7 +1,5 @@
 {
   "defaults": {
-    "run-as": "root"
-  },
-  "username": "ym040923-docker-manager",
-  "groupname": "ym040923-docker-manager"
+    "run-as": "package"
+  }
 }

@@ -1,18 +1,22 @@
 #!/bin/bash
 
-LOG_FILE="${TRIM_PKGVAR}/info.log"
-PID_FILE="${TRIM_PKGVAR}/app.pid"
-SOCKET_FILE="${TRIM_APPDEST}/app.sock"
+# shellcheck source=common
+source "$(dirname "${BASH_SOURCE[0]}")/common"
+ensure_runtime_dirs
+
+LOG_FILE="$DOCKER_MANAGER_LOG_FILE"
+PID_FILE="$DOCKER_MANAGER_PID_FILE"
+SOCKET_FILE="$DOCKER_MANAGER_SOCKET_FILE"
 
 export PATH=/var/apps/nodejs_v22/target/bin:$PATH
 export NODE_ENV=production
 export FNOS_NATIVE=1
 export FNOS_GATEWAY_PREFIX=/app/ym040923-docker-manager
 export FNOS_SOCKET_PATH="${SOCKET_FILE}"
-export SQLITE_PATH="${TRIM_PKGVAR}/docker-manager.db"
-export STATIC_DIR="${TRIM_APPDEST}/ui"
+export SQLITE_PATH="${DOCKER_MANAGER_DB_FILE}"
+export STATIC_DIR="${DOCKER_MANAGER_STATIC_DIR}"
 
-CMD="node ${TRIM_APPDEST}/server/index.js"
+CMD="node ${APP_DIR}/server/index.js"
 
 log_msg() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "${LOG_FILE}"
@@ -39,7 +43,7 @@ start_process() {
         return 0
     fi
 
-    mkdir -p "${TRIM_PKGVAR}"
+    ensure_runtime_dirs
     rm -f "${SOCKET_FILE}"
     log_msg "Starting Docker Manager"
     bash -c "${CMD}" >> "${LOG_FILE}" 2>&1 &

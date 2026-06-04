@@ -35,6 +35,10 @@ function writeJson(file, value) {
   fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
+function readJson(file) {
+  return JSON.parse(fs.readFileSync(file, "utf8"));
+}
+
 function crc32(buffer) {
   let crc = ~0;
   for (const byte of buffer) {
@@ -63,13 +67,45 @@ function makePng(size) {
   header[9] = 6;
 
   const rows = [];
+  const scale = size / 256;
   for (let y = 0; y < size; y += 1) {
     const row = Buffer.alloc(1 + size * 4);
     for (let x = 0; x < size; x += 1) {
       const offset = 1 + x * 4;
-      row[offset] = 37;
-      row[offset + 1] = 99;
-      row[offset + 2] = 235;
+      const cx = x / scale;
+      const cy = y / scale;
+      let r = 17;
+      let g = 24;
+      let b = 39;
+
+      const inPanel = cx >= 34 && cx <= 222 && cy >= 50 && cy <= 206;
+      if (inPanel) {
+        r = 15;
+        g = 118;
+        b = 178;
+      }
+
+      const tile =
+        ((cx >= 66 && cx <= 98) || (cx >= 112 && cx <= 144) || (cx >= 158 && cx <= 190)) &&
+        ((cy >= 86 && cy <= 118) || (cy >= 132 && cy <= 164));
+      if (tile) {
+        r = 236;
+        g = 253;
+        b = 255;
+      }
+
+      const rail = cx >= 60 && cx <= 196 && cy >= 176 && cy <= 188;
+      const dot1 = (cx - 82) ** 2 + (cy - 190) ** 2 <= 9 ** 2;
+      const dot2 = (cx - 174) ** 2 + (cy - 190) ** 2 <= 9 ** 2;
+      if (rail || dot1 || dot2) {
+        r = 10;
+        g = 32;
+        b = 52;
+      }
+
+      row[offset] = r;
+      row[offset + 1] = g;
+      row[offset + 2] = b;
       row[offset + 3] = 255;
     }
     rows.push(row);
@@ -86,6 +122,7 @@ function makePng(size) {
 function writeIcons() {
   const imagesDir = path.join(uiDir, "images");
   fs.mkdirSync(imagesDir, { recursive: true });
+  fs.writeFileSync(path.join(imagesDir, "icon.png"), makePng(256));
   fs.writeFileSync(path.join(imagesDir, "icon_64.png"), makePng(64));
   fs.writeFileSync(path.join(imagesDir, "icon_256.png"), makePng(256));
   fs.writeFileSync(path.join(packDir, "ICON.PNG"), makePng(64));
@@ -101,6 +138,46 @@ function chmodExecutableFiles(dir) {
       fs.chmodSync(file, 0o755);
     }
   }
+}
+
+function writeServerPackageJson() {
+  const rootPackage = readJson(path.join(root, "package.json"));
+  const runtimeDeps = [
+    "@trpc/server",
+    "axios",
+    "better-sqlite3",
+    "cookie",
+    "dockerode",
+    "dotenv",
+    "drizzle-orm",
+    "express",
+    "jose",
+    "nanoid",
+    "superjson",
+    "zod",
+  ];
+  const dependencies = {};
+  for (const name of runtimeDeps) {
+    if (!rootPackage.dependencies?.[name]) {
+      throw new Error(`Missing runtime dependency in root package.json: ${name}`);
+    }
+    dependencies[name] = rootPackage.dependencies[name];
+  }
+
+  writeJson(path.join(serverDir, "package.json"), {
+    name: `${rootPackage.name}-fnos-server`,
+    version: rootPackage.version,
+    type: "module",
+    private: true,
+    scripts: {
+      start: "NODE_ENV=production node index.js",
+    },
+    dependencies,
+    pnpm: {
+      onlyBuiltDependencies: ["better-sqlite3"],
+      ...(rootPackage.pnpm?.overrides ? { overrides: rootPackage.pnpm.overrides } : {}),
+    },
+  });
 }
 
 function resolveFnpack() {
@@ -137,7 +214,7 @@ resetDir(serverDir);
 resetDir(uiDir);
 copyDir(path.join(root, "dist", "public"), uiDir);
 fs.copyFileSync(path.join(root, "dist", "index.js"), path.join(serverDir, "index.js"));
-fs.copyFileSync(path.join(root, "package.json"), path.join(serverDir, "package.json"));
+writeServerPackageJson();
 fs.copyFileSync(path.join(root, "pnpm-lock.yaml"), path.join(serverDir, "pnpm-lock.yaml"));
 const patchesDir = path.join(root, "patches");
 if (fs.existsSync(patchesDir)) {
@@ -166,10 +243,10 @@ writeIcons();
 
 if (process.platform === "win32") {
   console.warn("[fnOS] Windows detected: not installing production node_modules because native better-sqlite3 must be built on Linux/fnOS.");
-  console.warn("[fnOS] Run `pnpm install --prod --frozen-lockfile` inside packaging/fnos-native/ym040923.docker-manager/app/server on fnOS/Linux before fnpack build.");
+  console.warn("[fnOS] Run `pnpm install --prod --no-frozen-lockfile --config.node-linker=hoisted` inside packaging/fnos-native/ym040923.docker-manager/app/server on fnOS/Linux before fnpack build.");
 } else {
   console.log("[fnOS] Installing production server dependencies");
-  run("pnpm", ["install", "--prod", "--frozen-lockfile"], { cwd: serverDir });
+  run("pnpm", ["install", "--prod", "--no-frozen-lockfile", "--config.node-linker=hoisted"], { cwd: serverDir });
 }
 
 chmodExecutableFiles(path.join(packDir, "cmd"));

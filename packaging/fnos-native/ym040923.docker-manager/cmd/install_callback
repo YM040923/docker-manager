@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-mkdir -p "${TRIM_PKGVAR}"
-"$(dirname "${BASH_SOURCE[0]}")/main" start || true
+# shellcheck source=common
+source "$(dirname "${BASH_SOURCE[0]}")/common"
+ensure_runtime_dirs
 echo "Docker Manager install callback"
