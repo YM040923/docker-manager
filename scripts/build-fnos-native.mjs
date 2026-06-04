@@ -106,6 +106,10 @@ copyDir(path.join(root, "dist", "public"), uiDir);
 fs.copyFileSync(path.join(root, "dist", "index.js"), path.join(serverDir, "index.js"));
 fs.copyFileSync(path.join(root, "package.json"), path.join(serverDir, "package.json"));
 fs.copyFileSync(path.join(root, "pnpm-lock.yaml"), path.join(serverDir, "pnpm-lock.yaml"));
+const patchesDir = path.join(root, "patches");
+if (fs.existsSync(patchesDir)) {
+  copyDir(patchesDir, path.join(serverDir, "patches"));
+}
 
 writeJson(path.join(uiDir, "config"), {
   ".url": {
